@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard.jsx'
 import Trends from './pages/Trends.jsx'
 import Invites from './pages/Invites.jsx'
 import Profile from './pages/Profile.jsx'
+import Join from './pages/Join.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -28,6 +29,7 @@ createRoot(document.getElementById('root')).render(
           <Route path="invites" element={<Invites />} />
           <Route path="profile" element={<Profile />} />
         </Route>
+        <Route path="/join/:id" element={<Join />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
