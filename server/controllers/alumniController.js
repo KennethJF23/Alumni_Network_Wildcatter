@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Alumnus = require('../models/Alumnus');
 const { parseQuery } = require('../ml_service/queryParser');
 const { extractAlumni } = require('../ml_service/extractor');
@@ -182,10 +183,10 @@ exports.searchAlumni = async (req, res) => {
 const escapeRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const has = { $nin: [null, ''], $exists: true };
 
-// GET /api/alumni?q=&college=&city=&company=&seniority=VP,Director&status=invited&hasEmail=true&hasPhone=true&limit=60
+// GET /api/alumni?q=&college=&city=&company=&seniority=VP,Director&status=invited&hasEmail=true&hasPhone=true&mine=true&limit=60
 exports.listAlumni = async (req, res) => {
   try {
-    const { college, city, company, q, seniority, status, hasEmail, hasPhone, limit } = req.query;
+    const { college, city, company, q, seniority, status, hasEmail, hasPhone, limit, mine } = req.query;
     const filter = {};
     if (college) filter.college = new RegExp(escapeRe(college), 'i');
     if (city) filter.city = new RegExp(escapeRe(city), 'i');
@@ -198,6 +199,7 @@ exports.listAlumni = async (req, res) => {
     if (status) filter.consentStatus = { $in: String(status).split(',') };
     if (hasEmail === 'true') filter.email = has;
     if (hasPhone === 'true') filter.phone = has;
+    if (mine === 'true') filter.invitedBy = req.user.id;
 
     const [alumni, total] = await Promise.all([
       Alumnus.find(filter).sort({ updatedAt: -1 }).limit(Math.min(Number(limit) || 200, 500)),
@@ -209,13 +211,16 @@ exports.listAlumni = async (req, res) => {
   }
 };
 
-// GET /api/alumni/stats   (data lake analytics)
-exports.statsAlumni = async (_req, res) => {
+// GET /api/alumni/stats?mine=true   (data lake analytics; mine scopes to the signed-in user's invites)
+exports.statsAlumni = async (req, res) => {
   try {
+    const scope = req.query.mine === 'true'
+      ? { invitedBy: new mongoose.Types.ObjectId(req.user.id) }
+      : {};
     const top = async (field, n) =>
       (
         await Alumnus.aggregate([
-          { $match: { [field]: has } },
+          { $match: { ...scope, [field]: has } },
           { $group: { _id: `$${field}`, count: { $sum: 1 } } },
           { $sort: { count: -1 } },
           { $limit: n },
@@ -228,6 +233,7 @@ exports.statsAlumni = async (_req, res) => {
     const [totals, colleges, bySeniority, byCollege, byCity, byCompany, byStatus, growth] =
       await Promise.all([
         Alumnus.aggregate([
+          { $match: scope },
           {
             $group: {
               _id: null,
@@ -239,14 +245,14 @@ exports.statsAlumni = async (_req, res) => {
             },
           },
         ]),
-        Alumnus.distinct('college'),
+        Alumnus.distinct('college', scope),
         top('seniority', 8),
         top('college', 8),
         top('city', 8),
         top('company', 8),
         top('consentStatus', 6),
         Alumnus.aggregate([
-          { $match: { createdAt: { $gte: since } } },
+          { $match: { ...scope, createdAt: { $gte: since } } },
           { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
           { $sort: { _id: 1 } },
         ]),

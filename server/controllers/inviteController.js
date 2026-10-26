@@ -70,6 +70,11 @@ exports.inviteOne = async (req, res) => {
         ? await markWhatsapp(doc)
         : await sendInvite(doc, { askPhone: channel === 'email_phone' });
 
+    if (result.sent) {
+      doc.invitedBy = req.user.id;
+      await doc.save();
+    }
+
     return res.json({ id: doc._id, name: doc.name, channel, ...result });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -107,6 +112,10 @@ exports.inviteBatch = async (req, res) => {
     const results = [];
     for (const d of docs) {
       const r = await sendInvite(d);
+      if (r.sent) {
+        d.invitedBy = req.user.id;
+        await d.save();
+      }
       results.push({ id: d._id, name: d.name, ...r });
       await new Promise((ok) => setTimeout(ok, 1100)); // EmailJS: max 1 request/second
     }

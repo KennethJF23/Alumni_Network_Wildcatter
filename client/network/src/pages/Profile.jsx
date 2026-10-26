@@ -13,7 +13,7 @@ export default function Profile() {
   const [s, setS] = useState(null)
 
   useEffect(() => {
-    api('/alumni/stats').then(setS).catch(() => {})
+    api('/alumni/stats?mine=true').then(setS).catch(() => {})
   }, [])
 
   const count = (k) => s?.byStatus?.find((x) => x.label === k)?.count || 0

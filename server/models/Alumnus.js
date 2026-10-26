@@ -50,6 +50,7 @@ const alumnusSchema = new mongoose.Schema(
     invitedAt: Date,
     joinedAt: Date,
     phoneRequestedAt: Date,
+    invitedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
   },
   { timestamps: true }
 );

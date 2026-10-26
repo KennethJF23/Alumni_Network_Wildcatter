@@ -13,7 +13,7 @@ export default function Invites() {
   const [err, setErr] = useState('')
 
   useEffect(() => {
-    api('/alumni?status=invited,accepted&limit=200')
+    api('/alumni?status=invited,accepted&mine=true&limit=200')
       .then((d) => setRows(d.alumni))
       .catch((e) => setErr(e.message))
   }, [])
