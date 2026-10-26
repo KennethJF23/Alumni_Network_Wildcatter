@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 
 const APP_NAME = 'AlumniLoop';
 
+// ---------- transport ----------
 let transporter;
 function getTransporter() {
   if (!transporter) {
@@ -15,6 +16,55 @@ function getTransporter() {
   return transporter;
 }
 
+// EmailJS (HTTPS) if configured, else Brevo (HTTPS), else plain SMTP.
+// EmailJS template needs: To = {{to_email}}, Subject = {{subject}}, Content = {{{html_message}}}
+async function deliver({ to, subject, text, html }) {
+  if (process.env.EMAILJS_SERVICE_ID) {
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        service_id: process.env.EMAILJS_SERVICE_ID,
+        template_id: process.env.EMAILJS_TEMPLATE_ID,
+        user_id: process.env.EMAILJS_PUBLIC_KEY,
+        accessToken: process.env.EMAILJS_PRIVATE_KEY,
+        template_params: { to_email: to, subject, html_message: html, message: text },
+      }),
+    });
+    if (!res.ok) throw new Error(`EmailJS ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return;
+  }
+
+  if (process.env.BREVO_API_KEY) {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': process.env.BREVO_API_KEY,
+        'content-type': 'application/json',
+        accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: APP_NAME, email: process.env.MAIL_FROM || process.env.SMTP_USER },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+        textContent: text,
+      }),
+    });
+    if (!res.ok) throw new Error(`Brevo ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    return;
+  }
+
+  await getTransporter().sendMail({
+    from: `"${APP_NAME}" <${process.env.SMTP_USER}>`,
+    to,
+    subject,
+    text,
+    html,
+  });
+}
+
+// ---------- message ----------
 const esc = (s) =>
   String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -59,6 +109,7 @@ function blocked(doc) {
   return null;
 }
 
+// ---------- actions ----------
 // Real send. Only call this after the user confirmed the preview.
 async function sendInvite(doc, { askPhone = false } = {}) {
   if (!doc.email) return { sent: false, reason: 'no_email' };
@@ -67,13 +118,7 @@ async function sendInvite(doc, { askPhone = false } = {}) {
 
   const inv = buildInvite(doc, askPhone);
   try {
-    await getTransporter().sendMail({
-      from: `"${APP_NAME}" <${process.env.SMTP_USER}>`,
-      to: doc.email,
-      subject: inv.subject,
-      text: inv.text,
-      html: inv.html,
-    });
+    await deliver({ to: doc.email, subject: inv.subject, text: inv.text, html: inv.html });
     doc.consentStatus = 'invited';
     doc.inviteChannel = 'email';
     doc.invitedAt = new Date();

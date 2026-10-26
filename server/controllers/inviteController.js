@@ -108,6 +108,7 @@ exports.inviteBatch = async (req, res) => {
     for (const d of docs) {
       const r = await sendInvite(d);
       results.push({ id: d._id, name: d.name, ...r });
+      await new Promise((ok) => setTimeout(ok, 1100)); // EmailJS: max 1 request/second
     }
 
     return res.json({
